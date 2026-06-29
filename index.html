@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <title>monday.com Peers — by Size</title>
+  <style>
+    :root {
+      --bg: #080808; --surface: #0d0d0d; --border: #1c1c1c;
+      --text: #f0f0f0; --dim: #555; --accent: #ff2d2d;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:100vw; height:100vh; overflow:hidden; background:var(--bg);
+                 font-family:'Poppins',sans-serif; color:var(--text); }
+
+    .strips { height:100vh; display:flex; flex-direction:row; gap:14px; padding:14px; }
+    .strip { flex:1; display:flex; flex-direction:column; overflow:hidden;
+             border-radius:9px; background:var(--surface); border:1px solid var(--border);
+             position:relative; box-shadow:0 6px 18px rgba(0,0,0,.35); }
+
+    .strip-label { flex-shrink:0; height:clamp(30px,3.4vh,46px); display:flex; align-items:center;
+                   gap:8px; padding:0 11px; background:rgba(8,8,8,.95);
+                   border-bottom:1px solid var(--border); }
+    .fav { width:15px; height:15px; border-radius:3px; flex-shrink:0; }
+    .nm  { display:flex; flex-direction:column; line-height:1.15; min-width:0; }
+    .sname { font-size:clamp(11px,1.05vw,15px); font-weight:700; color:#fff; white-space:nowrap; }
+    .ssize { font-size:clamp(7px,0.72vw,10px); font-weight:600; color:var(--dim); white-space:nowrap; }
+    .rank  { margin-left:auto; font-size:clamp(11px,1.1vw,16px); font-weight:800;
+             color:#2c2c2c; flex-shrink:0; }
+    .flag { display:none; align-items:center; gap:4px; margin-left:auto;
+            font-size:clamp(7px,0.72vw,10px); font-weight:800; letter-spacing:.05em;
+            text-transform:uppercase; color:#fff; background:var(--accent);
+            padding:2px 8px; border-radius:4px; cursor:pointer; }
+    .flag::before { content:""; width:5px; height:5px; border-radius:50%; background:#fff; }
+    .strip.changed .flag { display:inline-flex; }
+    .strip.changed { box-shadow: inset 0 0 0 2px var(--accent), 0 0 18px rgba(255,45,45,.4); }
+    .strip.changed .strip-label { background:rgba(255,45,45,.12); }
+
+    .screen { flex:1; overflow:hidden; position:relative; }
+    .screen img { width:100%; height:auto; display:block; position:absolute; top:0; left:0;
+                  opacity:0; transition:opacity .6s; }
+    .screen img.loaded { opacity:1; }
+
+    .spin-wrap { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+                 background:var(--surface); z-index:2; transition:opacity .4s; }
+    .spin-wrap.hide { opacity:0; pointer-events:none; }
+    .spin { width:18px; height:18px; border:2px solid var(--border); border-top-color:#2a2a2a;
+            border-radius:50%; animation:rot .8s linear infinite; }
+    @keyframes rot { to { transform:rotate(360deg); } }
+
+    .stamp { position:fixed; bottom:6px; right:10px; font-size:10px; color:#333;
+             font-weight:600; letter-spacing:.04em; z-index:5; }
+  </style>
+</head>
+<body>
+  <div class="strips" id="strips"></div>
+  <div class="stamp" id="stamp"></div>
+
+<script>
+// ordered largest → smallest by monthly web traffic
+const SITES = [
+  { name:"Notion",     size:"~50–100M /mo", domain:"notion.com" },
+  { name:"Asana",      size:"~10–20M /mo",  domain:"asana.com" },
+  { name:"ClickUp",    size:"~10–15M /mo",  domain:"clickup.com" },
+  { name:"Airtable",   size:"~5–10M /mo",   domain:"airtable.com" },
+  { name:"Smartsheet", size:"~5–8M /mo",    domain:"smartsheet.com" },
+];
+
+const fav = d => `https://www.google.com/s2/favicons?domain=${d}&sz=32`;
+// static images committed hourly by the capture job; cache-bust so reloads pick up new shots
+const shotUrl = (d, v) => `shots/${d}.png?v=${v}`;
+
+const strips = document.getElementById('strips');
+SITES.forEach((site, i) => {
+  const strip = document.createElement('div');
+  strip.className = 'strip';
+  strip.id = `strip-${site.domain}`;
+  strip.innerHTML = `
+    <div class="strip-label">
+      <img class="fav" src="${fav(site.domain)}" alt="">
+      <span class="nm"><span class="sname">${site.name}</span><span class="ssize">${site.size}</span></span>
+      <span class="flag" title="Homepage changed at last capture — click to clear">New</span>
+      <span class="rank">${i+1}</span>
+    </div>
+    <div class="screen" id="scr-${site.domain}">
+      <div class="spin-wrap" id="spin-${site.domain}"><div class="spin"></div></div>
+      <img id="img-${site.domain}" src="">
+    </div>`;
+  strips.appendChild(strip);
+
+  const img  = document.getElementById(`img-${site.domain}`);
+  const spin = document.getElementById(`spin-${site.domain}`);
+  img.addEventListener('load', () => { img.classList.add('loaded'); spin.classList.add('hide'); });
+  img.addEventListener('error', () => { spin.innerHTML = '<div style="font-size:10px;color:#2a2a2a">Unavailable</div>'; });
+  strip.addEventListener('click', () => strip.classList.remove('changed'));
+});
+
+// Pull the capture job's metadata: load the right image version + flag changed sites.
+async function refresh() {
+  let meta = {};
+  try { meta = await (await fetch(`shots/meta.json?t=${Date.now()}`, {cache:'no-store'})).json(); } catch {}
+  const v = meta.updated || Date.now();
+  const changed = new Set(meta.changed || []);
+  SITES.forEach(site => {
+    const img = document.getElementById(`img-${site.domain}`);
+    img.classList.remove('loaded');
+    img.src = shotUrl(site.domain, v);
+    document.getElementById(`strip-${site.domain}`).classList.toggle('changed', changed.has(site.domain));
+  });
+  if (meta.updated) {
+    const d = new Date(meta.updated * 1000);
+    document.getElementById('stamp').textContent =
+      'Updated ' + d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+  }
+}
+refresh();
+// re-check for fresh shots every 15 min (job commits hourly)
+setInterval(refresh, 15*60*1000);
+</script>
+</body>
+</html>
