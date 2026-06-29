@@ -1,0 +1,40 @@
+name: Capture Competitor Watch
+
+on:
+  schedule:
+    - cron: "0 * * * *"      # top of every hour (UTC)
+  workflow_dispatch:          # manual "Run workflow" button
+
+permissions:
+  contents: write             # commit refreshed screenshots back to the repo
+
+concurrency:
+  group: competitor-watch
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright pillow
+          python -m playwright install --with-deps chromium
+
+      - name: Capture homepages
+        run: python capture_all.py
+
+      - name: Commit refreshed shots
+        run: |
+          git config user.name  "competitor-watch-bot"
+          git config user.email "actions@github.com"
+          git add shots
+          git commit -m "Refresh competitor screenshots [skip ci]" || echo "no changes"
+          git push || echo "nothing to push"
