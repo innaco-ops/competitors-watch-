@@ -1,8 +1,9 @@
 {
-  "updated": 1789942177,
+  "updated": 1789952272,
   "changed": [],
   "failed": [
-    "notion.com",
-    "asana.com"
+    "clickup.com",
+    "airtable.com",
+    "smartsheet.com"
   ]
 }
